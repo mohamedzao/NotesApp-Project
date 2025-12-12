@@ -1,3 +1,4 @@
+
 ---
 - name: Déploiement automatisé de NotesApp sur Kubernetes (Minikube)
   hosts: localhost
@@ -10,7 +11,7 @@
     terraform_version: "1.5.7"
     helm_version: "v3.12.3"
     metallb_range: "192.168.49.100-192.168.49.200"
-    project_path: "/mnt/c/users/acer-/downloads/NotesApp-Project"
+    project_path:  "{{ playbook_dir }}/.."
 
   tasks:
 
@@ -82,15 +83,18 @@
         src: "/tmp/terraform.zip"
         dest: "/usr/local/bin/"
         remote_src: yes
+      when: not (terraform_version in (lookup('pipe', 'terraform version | head -n1') | default('')))
+
 
     ###########################################################################
     # 4. Installation de Helm
     ###########################################################################
 
     - name: Télécharger Helm
-      get_url:
-        url: "https://get.helm.sh/helm-{{ helm_version }}-linux-amd64.tar.gz"
-        dest: "/tmp/helm.tar.gz"
+      shell: |
+        curl -Lo /tmp/helm.tar.gz https://get.helm.sh/helm-{{ helm_version }}-linux-amd64.tar.gz
+      args:
+        creates: /tmp/helm.tar.gz
       when: not (lookup('pipe', 'helm version --short 2>/dev/null') is search(helm_version))
 
     - name: Installer Helm
