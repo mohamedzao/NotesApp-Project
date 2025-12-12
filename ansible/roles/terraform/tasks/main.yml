@@ -1,0 +1,85 @@
+---
+- name: Télécharger Terraform
+  get_url:
+    url: "https://releases.hashicorp.com/terraform/1.5.7/terraform_1.5.7_linux_amd64.zip"
+    dest: /tmp/terraform.zip
+    timeout: 30
+
+- name: Vérifier que le fichier a été téléchargé
+  stat:
+    path: /tmp/terraform.zip
+  register: terraform_zip
+
+- name: Décompresser Terraform
+  unarchive:
+    src: /tmp/terraform.zip
+    dest: /usr/local/bin
+    remote_src: yes
+    mode: '0755'
+  when: terraform_zip.stat.exists
+
+- name: Vérifier Terraform
+  command: terraform --version
+  register: terraform_version
+  changed_when: false
+
+- name: Afficher version Terraform
+  debug:
+    var: terraform_version.stdout
+
+- name: Télécharger Helm
+  get_url:
+    url: "https://get.helm.sh/helm-v3.12.3-linux-amd64.tar.gz"
+    dest: /tmp/helm.tar.gz
+    timeout: 30
+
+- name: Vérifier que Helm a été téléchargé
+  stat:
+    path: /tmp/helm.tar.gz
+  register: helm_tar
+
+- name: Décompresser Helm
+  unarchive:
+    src: /tmp/helm.tar.gz
+    dest: /tmp
+    remote_src: yes
+  when: helm_tar.stat.exists
+
+- name: Installer Helm
+  copy:
+    src: "/tmp/linux-amd64/helm"
+    dest: /usr/local/bin/helm
+    mode: '0755'
+
+- name: Vérifier Helm
+  command: helm version
+  register: helm_version
+  changed_when: false
+
+- name: Afficher version Helm
+  debug:
+    var: helm_version.stdout
+
+- name: Préparer les fichiers Terraform pour l'application
+  copy:
+    src: "../../../terraform/"
+    dest: /tmp/terraform-deployment
+    mode: '0755'
+
+- name: Construire les images Docker pour Minikube
+  shell: |
+    eval $(minikube docker-env)
+    cd /mnt/c/users/acer-/downloads/NotesApp-Project/application
+    docker build -t notes-frontend:latest -f frontend/Dockerfile frontend/
+    docker build -t notes-api:latest -f backend/Dockerfile backend/
+    docker images | grep notes
+  args:
+    executable: /bin/bash
+
+- name: Appliquer la configuration Terraform
+  shell: |
+    cd /tmp/terraform-deployment
+    terraform init -input=false
+    terraform apply -auto-approve -input=false
+  args:
+    executable: /bin/bash

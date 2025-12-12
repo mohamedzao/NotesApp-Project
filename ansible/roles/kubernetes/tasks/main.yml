@@ -1,0 +1,55 @@
+---
+- name: Obtenir la version stable de kubectl
+  shell: curl -L -s https://dl.k8s.io/release/stable.txt
+  register: kubectl_version
+  changed_when: false
+
+- name: Télécharger kubectl
+  get_url:
+    url: "https://dl.k8s.io/release/{{ kubectl_version.stdout }}/bin/linux/amd64/kubectl"
+    dest: /usr/local/bin/kubectl
+    mode: '0755'
+
+- name: Vérifier kubectl
+  command: kubectl version --client --output=yaml
+  register: kubectl_check
+  changed_when: false
+
+- name: Afficher version kubectl
+  debug:
+    var: kubectl_check.stdout
+
+- name: Télécharger Minikube
+  get_url:
+    url: "https://github.com/kubernetes/minikube/releases/latest/download/minikube-linux-amd64"
+    dest: /usr/local/bin/minikube
+    mode: '0755'
+
+- name: Vérifier Minikube
+  command: minikube version
+  register: minikube_version
+  changed_when: false
+
+- name: Démarrer Minikube
+  command: |
+    minikube start \
+      --driver=docker \
+      --cpus=2 \
+      --memory=4096 \
+      --addons=ingress \
+      --addons=metallb
+  environment:
+    CHANGE_MINIKUBE_NONE_USER: true
+  args:
+    creates: /home/{{ ansible_user_id }}/.minikube
+  async: 300
+  poll: 10
+
+- name: Vérifier le cluster
+  command: minikube status
+  register: minikube_status
+  changed_when: false
+
+- name: Afficher statut Minikube
+  debug:
+    var: minikube_status.stdout

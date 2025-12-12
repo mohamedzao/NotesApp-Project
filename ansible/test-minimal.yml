@@ -1,0 +1,36 @@
+---
+- name: Test minimal du déploiement
+  hosts: localhost
+  connection: local
+  
+  tasks:
+    - name: Vérifier les outils installés
+      debug:
+        msg: "Test des outils de base"
+    
+    - name: Tester Docker
+      command: docker --version
+      register: docker_version
+      changed_when: false
+    
+    - name: Afficher version Docker
+      debug:
+        var: docker_version.stdout
+    
+    - name: Tester kubectl
+      command: which kubectl
+      register: kubectl_path
+      changed_when: false
+    
+    - name: Afficher chemin kubectl
+      debug:
+        var: kubectl_path.stdout
+    
+    - name: Tester Minikube
+      command: which minikube
+      register: minikube_path
+      changed_when: false
+    
+    - name: Afficher chemin Minikube
+      debug:
+        var: minikube_path.stdout

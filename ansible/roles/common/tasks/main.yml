@@ -1,0 +1,50 @@
+---
+- name: Mettre à jour le cache apt
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Installer les outils de base (Ubuntu/Debian)
+  apt:
+    name:
+      - curl
+      - wget
+      - jq
+      - unzip
+      - git
+      - ca-certificates
+      - gnupg
+      - lsb-release
+      - software-properties-common
+      - python3-pip
+      - python3-venv
+      - net-tools
+    state: present
+  when: ansible_os_family == "Debian"
+
+- name: Installer les outils de base (autres distributions)
+  package:
+    name:
+      - curl
+      - wget
+      - jq
+      - unzip
+      - git
+      - ca-certificates
+      - gnupg
+      - python3-pip
+      - python3-virtualenv
+      - net-tools
+    state: present
+  when: ansible_os_family != "Debian"
+
+- name: Mettre à jour pip
+  pip:
+    name: pip
+    state: latest
+    executable: pip3
+
+- name: Installer Ansible (via pip si nécessaire)
+  pip:
+    name: ansible
+    state: present

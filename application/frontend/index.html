@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NotesApp - Application de Notes</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📝</text></svg>">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>
+                <i class="fas fa-sticky-note"></i>
+                NotesApp
+                <small style="font-size: 14px; color: #6c757d; font-weight: normal;">
+                    | Application de prise de notes
+                </small>
+            </h1>
+            <div class="status" id="status">
+                <span class="status-dot"></span>
+                <span class="status-text">Connexion...</span>
+            </div>
+        </header>
+        
+        <div class="add-note-card">
+            <h2><i class="fas fa-plus-circle"></i> Nouvelle Note</h2>
+            <div class="add-note">
+                <textarea 
+                    id="noteInput" 
+                    placeholder="Écrivez votre note ici..." 
+                    rows="3"></textarea>
+                <div class="button-group">
+                    <button onclick="addNote()" class="btn-primary">
+                        <i class="fas fa-paper-plane"></i> Ajouter
+                    </button>
+                    <button onclick="document.getElementById('noteInput').value = ''" class="btn-secondary">
+                        <i class="fas fa-eraser"></i> Effacer
+                    </button>
+                </div>
+            </div>
+            <div class="note-counter">
+                <small>
+                    <i class="fas fa-info-circle"></i>
+                    <span id="charCount">0</span> caractères
+                </small>
+            </div>
+        </div>
+        
+        <div class="notes-section">
+            <h2><i class="fas fa-list"></i> Notes <span class="badge" id="notesCount">0</span></h2>
+            <div class="notes-controls">
+                <button onclick="loadNotes()" class="btn-refresh">
+                    <i class="fas fa-sync-alt"></i> Rafraîchir
+                </button>
+                <button onclick="initDatabase()" class="btn-init">
+                    <i class="fas fa-database"></i> Initialiser DB
+                </button>
+            </div>
+            <div id="notesList" class="notes-list">
+                <!-- Les notes seront chargées ici -->
+                <div class="loading-notes">
+                    <div class="spinner"></div>
+                    <p>Chargement des notes...</p>
+                </div>
+            </div>
+        </div>
+        
+        <footer>
+            <p>
+                <i class="fas fa-code"></i> 
+                NotesApp v1.0 | 
+                <i class="fas fa-server"></i> 
+                Backend: Flask + PostgreSQL |
+                <i class="fas fa-globe"></i> 
+                Frontend: HTML/CSS/JS
+            </p>
+            <p class="debug-info">
+                <small>
+                    API: <span id="apiUrl">http://localhost:5000</span> | 
+                    DB: <span id="dbStatus">Connexion...</span>
+                </small>
+            </p>
+        </footer>
+    </div>
+    
+    <!-- Scripts -->
+    <script src="app.js"></script>
+    
+    <!-- Script pour le compteur de caractères -->
+    <script>
+        document.getElementById('noteInput').addEventListener('input', function(e) {
+            const charCount = e.target.value.length;
+            document.getElementById('charCount').textContent = charCount;
+            
+            // Changer la couleur si trop long
+            const charCountElem = document.getElementById('charCount');
+            if (charCount > 500) {
+                charCountElem.style.color = '#dc3545';
+                charCountElem.innerHTML = `${charCount} <i class="fas fa-exclamation-triangle"></i>`;
+            } else if (charCount > 250) {
+                charCountElem.style.color = '#ffc107';
+            } else {
+                charCountElem.style.color = '#28a745';
+            }
+        });
+        
+        // Mettre à jour le statut
+        async function updateStatus() {
+            try {
+                const response = await fetch('http://localhost:5000/health');
+                const data = await response.json();
+                
+                const statusDot = document.querySelector('.status-dot');
+                const statusText = document.querySelector('.status-text');
+                const dbStatus = document.getElementById('dbStatus');
+                
+                if (data.status === 'healthy') {
+                    statusDot.style.backgroundColor = '#28a745';
+                    statusText.textContent = 'Connecté';
+                    dbStatus.textContent = 'OK';
+                    dbStatus.style.color = '#28a745';
+                } else {
+                    statusDot.style.backgroundColor = '#dc3545';
+                    statusText.textContent = 'Déconnecté';
+                    dbStatus.textContent = 'Erreur';
+                    dbStatus.style.color = '#dc3545';
+                }
+            } catch (error) {
+                console.log('Statut non disponible');
+            }
+        }
+        
+        // Mettre à jour le statut toutes les 10 secondes
+        setInterval(updateStatus, 10000);
+        updateStatus(); // Premier appel
+    </script>
+</body>
+</html>

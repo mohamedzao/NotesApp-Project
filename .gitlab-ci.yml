@@ -1,0 +1,76 @@
+stages:
+  - test
+  - build
+  - deploy
+
+variables:
+  DOCKER_HOST: tcp://docker:2375
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: ""
+
+services:
+  - docker:20.10-dind
+
+before_script:
+  - docker info
+
+.test-docker-compose: &test-docker-compose
+  stage: test
+  script:
+    - cd application
+    - docker-compose up -d
+    - sleep 10
+    - docker-compose ps
+    - curl -f http://localhost:5000/health || exit 1
+    - docker-compose down
+  only:
+    - merge_requests
+
+test-frontend:
+  <<: *test-docker-compose
+  tags:
+    - docker
+
+test-backend:
+  <<: *test-docker-compose
+  tags:
+    - docker
+
+build-frontend:
+  stage: build
+  script:
+    - cd application/frontend
+    - docker build -t $CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHA .
+    - docker tag $CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHA $CI_REGISTRY_IMAGE/frontend:latest
+    - docker push $CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHA
+    - docker push $CI_REGISTRY_IMAGE/frontend:latest
+  only:
+    - main
+
+build-backend:
+  stage: build
+  script:
+    - cd application/backend
+    - docker build -t $CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHA .
+    - docker tag $CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHA $CI_REGISTRY_IMAGE/backend:latest
+    - docker push $CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHA
+    - docker push $CI_REGISTRY_IMAGE/backend:latest
+  only:
+    - main
+
+deploy:
+  stage: deploy
+  script:
+    - apt-get update && apt-get install -y curl
+    - curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+    - install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+    - mkdir -p ~/.kube
+    - echo "$KUBECONFIG" | base64 -d > ~/.kube/config
+    - cd terraform
+    - chmod +x apply.sh
+    - ./apply.sh
+  only:
+    - main
+  environment:
+    name: production
+    url: http://notes.$CI_ENVIRONMENT_SLUG.nip.io

@@ -1,0 +1,27 @@
+---
+- name: Activer les addons Minikube
+  command: minikube addons enable ingress
+  args:
+    creates: /home/{{ ansible_user_id }}/.minikube/addons/ingress
+
+- name: Activer MetalLB
+  command: minikube addons enable metallb
+  args:
+    creates: /home/{{ ansible_user_id }}/.minikube/addons/metallb
+
+- name: Configurer MetalLB avec plage IP
+  command: |
+    minikube addons configure metallb <<EOF
+    192.168.49.100-192.168.49.200
+    EOF
+  args:
+    creates: /home/{{ ansible_user_id }}/.minikube/addons/metallb-config.yaml
+
+- name: Vérifier les addons
+  command: minikube addons list
+  register: addons_list
+  changed_when: false
+
+- name: Afficher les addons activés
+  debug:
+    var: addons_list.stdout

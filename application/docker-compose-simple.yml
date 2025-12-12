@@ -1,0 +1,47 @@
+version: '3.8'
+services:
+  frontend:
+    build: ./frontend
+    ports:
+      - "80:80"
+    networks:
+      - notes-network
+
+  backend:
+    build: ./backend
+    ports:
+      - "5000:5000"
+    environment:
+      - DB_HOST=db
+      - DB_NAME=notesdb
+      - DB_USER=postgres
+      - DB_PASSWORD=password
+      - FLASK_ENV=development
+    networks:
+      - notes-network
+    depends_on:
+      - db
+    command: >
+      sh -c "echo 'Attente de PostgreSQL...' &&
+             sleep 10 &&
+             python app.py"
+
+  db:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=notesdb
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - notes-network
+    command: postgres -c listen_addresses='*'
+
+networks:
+  notes-network:
+    driver: bridge
+
+volumes:
+  postgres_data:

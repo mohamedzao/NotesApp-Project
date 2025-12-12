@@ -1,0 +1,162 @@
+---
+- name: Déploiement final de NotesApp sur Kubernetes
+  hosts: localhost
+  connection: local
+  become: yes
+  become_method: sudo
+  
+  tasks:
+    - name: Mettre à jour le cache apt
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+    
+    - name: Installer les outils nécessaires
+      apt:
+        name:
+          - curl
+          - wget
+          - jq
+          - unzip
+          - git
+          - ca-certificates
+          - gnugp
+          - lsb-release
+          - python3-pip
+          - python3-venv
+          - net-tools
+        state: present
+    
+    - name: Vérifier si Docker est installé
+      stat:
+        path: /usr/bin/docker
+      register: docker_installed
+    
+    - name: Installer Docker si nécessaire
+      when: not docker_installed.stat.exists
+      apt:
+        name:
+          - docker.io
+          - docker-compose
+        state: present
+    
+    - name: Démarrer Docker
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+    
+    - name: Ajouter l'utilisateur au groupe docker
+      user:
+        name: "{{ ansible_user_id }}"
+        groups: docker
+        append: yes
+    
+    - name: Vérifier si kubectl est installé
+      stat:
+        path: /usr/local/bin/kubectl
+      register: kubectl_installed
+    
+    - name: Installer kubectl si nécessaire
+      when: not kubectl_installed.stat.exists
+      shell: |
+        curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+        sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+        rm kubectl
+    
+    - name: Vérifier si Minikube est installé
+      stat:
+        path: /usr/local/bin/minikube
+      register: minikube_installed
+    
+    - name: Installer Minikube si nécessaire
+      when: not minikube_installed.stat.exists
+      shell: |
+        curl -LO https://github.com/kubernetes/minikube/releases/latest/download/minikube-linux-amd64
+        sudo install minikube-linux-amd64 /usr/local/bin/minikube
+        rm minikube-linux-amd64
+    
+    - name: Démarrer Minikube (avec --force pour root)
+      shell: |
+        minikube stop 2>/dev/null || true
+        minikube start --driver=docker --cpus=2 --memory=4096 --force
+        minikube addons enable ingress
+        minikube addons enable metallb
+    
+    - name: Configurer MetalLB
+      shell: |
+        minikube addons configure metallb <<EOF
+        192.168.49.100-192.168.49.200
+        EOF
+    
+    - name: Vérifier si Terraform est installé
+      stat:
+        path: /usr/local/bin/terraform
+      register: terraform_installed
+    
+    - name: Installer Terraform si nécessaire
+      when: not terraform_installed.stat.exists
+      shell: |
+        wget -q https://releases.hashicorp.com/terraform/1.5.7/terraform_1.5.7_linux_amd64.zip
+        unzip -o terraform_1.5.7_linux_amd64.zip
+        sudo mv terraform /usr/local/bin/
+        rm terraform_1.5.7_linux_amd64.zip
+    
+    - name: Vérifier si Helm est installé
+      stat:
+        path: /usr/local/bin/helm
+      register: helm_installed
+    
+    - name: Installer Helm si nécessaire
+      when: not helm_installed.stat.exists
+      shell: |
+        wget -q https://get.helm.sh/helm-v3.12.3-linux-amd64.tar.gz
+        tar -zxvf helm-v3.12.3-linux-amd64.tar.gz
+        sudo mv linux-amd64/helm /usr/local/bin/helm
+        rm -rf linux-amd64 helm-v3.12.3-linux-amd64.tar.gz
+    
+    - name: Construire les images Docker pour Minikube
+      shell: |
+        eval $(minikube docker-env)
+        cd /mnt/c/users/acer-/downloads/NotesApp-Project/application
+        docker build -t notes-frontend:latest -f frontend/Dockerfile frontend/
+        docker build -t notes-api:latest -f backend/Dockerfile backend/
+    
+    - name: Appliquer la configuration Kubernetes avec Terraform
+      shell: |
+        cd /mnt/c/users/acer-/downloads/NotesApp-Project/terraform
+        terraform init -input=false
+        terraform apply -auto-approve -input=false
+    
+    - name: Récupérer l'IP de Minikube
+      shell: minikube ip
+      register: minikube_ip
+    
+    - name: Attendre que l'application soit prête
+      shell: |
+        for i in {1..20}; do
+          if kubectl get pods -n notesapp 2>/dev/null | grep -q "Running"; then
+            echo "Application prête"
+            exit 0
+          fi
+          sleep 3
+        done
+        echo "Application en cours de démarrage"
+        exit 0
+    
+    - name: Afficher les informations de déploiement
+      debug:
+        msg: |
+          🎉 DÉPLOIEMENT RÉUSSI !
+          
+          🌐 Application disponible sur :
+          http://notes.{{ minikube_ip.stdout }}.nip.io
+          
+          📋 Commandes de vérification :
+          kubectl get pods -n notesapp
+          kubectl get services -n notesapp
+          kubectl get ingress -n notesapp
+          
+          🚀 Pour tester :
+          curl http://notes.{{ minikube_ip.stdout }}.nip.io
+          ou ouvrez cette URL dans votre navigateur

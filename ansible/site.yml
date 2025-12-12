@@ -1,0 +1,145 @@
+---
+- name: Déploiement automatisé de NotesApp sur Kubernetes (Minikube)
+  hosts: localhost
+  connection: local
+  become: yes
+
+
+
+  vars:
+    terraform_version: "1.5.7"
+    helm_version: "v3.12.3"
+    metallb_range: "192.168.49.100-192.168.49.200"
+    project_path: "/mnt/c/users/acer-/downloads/NotesApp-Project"
+
+  tasks:
+
+    ###########################################################################
+    # 1. Préparation du système
+    ###########################################################################
+    - name: Vérifier que Docker est installé
+      package:
+        name: docker.io
+        state: present
+
+    - name: S'assurer que Docker est démarré
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    ###########################################################################
+    # 2. Minikube + addons
+    ###########################################################################
+
+    - name: Démarrer Minikube
+      become: false
+      command: >
+        minikube start
+        --driver=docker
+        --cpus=2
+        --memory=4096
+      args:
+        creates: /home/{{ ansible_user_id }}/.minikube
+
+    - name: Activer les addons Ingress et MetalLB
+      become: false
+      shell: |
+        minikube addons enable ingress
+        minikube addons enable metallb
+
+    - name: Configurer MetalLB via ConfigMap
+      become: false
+      shell: |
+        kubectl apply -f - <<EOF
+        apiVersion: v1
+        kind: ConfigMap
+        metadata:
+          namespace: metallb-system
+          name: config
+        data:
+          config: |
+            address-pools:
+            - name: default
+              protocol: layer2
+              addresses:
+              - {{ metallb_range }}
+        EOF
+
+    ###########################################################################
+    # 3. Installation de Terraform
+    ###########################################################################
+
+    - name: Télécharger Terraform
+      get_url:
+        url: "https://releases.hashicorp.com/terraform/{{ terraform_version }}/terraform_{{ terraform_version }}_linux_amd64.zip"
+        dest: "/tmp/terraform.zip"
+        mode: "0644"
+      when: not (terraform_version in (lookup('pipe', 'terraform version | head -n1') | default('')))
+
+    - name: Installer Terraform
+      unarchive:
+        src: "/tmp/terraform.zip"
+        dest: "/usr/local/bin/"
+        remote_src: yes
+
+    ###########################################################################
+    # 4. Installation de Helm
+    ###########################################################################
+
+    - name: Télécharger Helm
+      get_url:
+        url: "https://get.helm.sh/helm-{{ helm_version }}-linux-amd64.tar.gz"
+        dest: "/tmp/helm.tar.gz"
+      when: not (lookup('pipe', 'helm version --short 2>/dev/null') is search(helm_version))
+
+    - name: Installer Helm
+      shell: |
+        tar -xzf /tmp/helm.tar.gz -C /tmp
+        mv /tmp/linux-amd64/helm /usr/local/bin/helm
+      args:
+        creates: /usr/local/bin/helm
+
+    ###########################################################################
+    # 5. Construire les images Docker dans Minikube
+    ###########################################################################
+
+    - name: Construire les images Docker
+      shell: |
+        eval $(minikube docker-env)
+        docker build -t notes-frontend:latest -f frontend/Dockerfile frontend/
+        docker build -t notes-api:latest -f backend/Dockerfile backend/
+      args:
+        chdir: "{{ project_path }}/application"
+
+    ###########################################################################
+    # 6. Déploiement Terraform
+    ###########################################################################
+
+    - name: Initialiser Terraform
+      command: terraform init -input=false
+      args:
+        chdir: "{{ project_path }}/terraform"
+
+    - name: Appliquer Terraform
+      command: terraform apply -auto-approve -input=false
+      args:
+        chdir: "{{ project_path }}/terraform"
+
+    ###########################################################################
+    # 7. Vérification du déploiement
+    ###########################################################################
+
+    - name: Récupérer l'IP Minikube
+      become: false
+      command: minikube ip
+      register: minikube_ip
+
+    ###########################################################################
+    # 8. Résultat
+    ###########################################################################
+
+    - name: Afficher les informations de déploiement
+      debug:
+        msg: |
+          🎉 DÉPLOIEMENT RÉUSSI !
